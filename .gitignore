@@ -1,0 +1,11 @@
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+.DS_Store
+.env*
+!.env.example
+
+# the exercise brief itself — kept locally, not part of the submission
+Take_Home_Exercise_Platform_Foundation.docx
