@@ -81,6 +81,41 @@ Type → input mapping: `text→text`, `long_text→textarea`, `number→number`
 (`old_town` → "Old town"), and `sensitivity` and raw `constraints` are passed
 through as client-side hints.
 
+### Part 2b — which fields earn a database index
+
+Not asked for. Added because the flexible fields live in one JSON document per
+record, so nothing is indexed by default, and a definition is the only thing that
+knows what a client actually queries on.
+
+```ts
+import { describeIndexes } from "./lib/validation";
+const { indexes } = describeIndexes(definition);
+// [{ field: "urgency", type: "choice", reasons: ["filter", "sort"] }, ...]
+```
+
+A field earns an index only if its own definition says it is filtered, sorted, or
+reported on. Same rule as everywhere else: no client knowledge, change the
+definition and the answer changes with it. This reads the three flags described
+below — see Part C for why I am not certain it belongs.
+
+---
+
+## Extensions to the starter definitions
+
+`definitions/` holds the three starter definitions with two additions. Both are
+mine, not the exercise's, and everything works without them.
+
+- **`version`** (top level) — a definition is data that changes over time, and a
+  stored record needs to say which version it was validated against. Carried
+  through `describeForm` and `describeIndexes` output; nothing depends on it yet.
+- **`filterable` / `sortable` / `reporting_dimension`** (per field, all optional)
+  — the "how a field is used" gap described below. `describeIndexes` is the only
+  consumer.
+
+The validator ignores all four keys, so a definition without them behaves
+identically. A fourth client's definition, written to the format exactly as
+shipped, needs no changes to run here.
+
 ---
 
 ## Decisions the format left open
@@ -116,9 +151,9 @@ resolved, and why.
 
 ### What I would add to the format
 
-The starter notes the format is not necessarily complete. Four things I would
-change, each visible in the three definitions as they stand. I built against the
-format as given — none of this is implemented.
+The starter notes the format is not necessarily complete. Five things I would
+change, each visible in the three definitions as they stand. Four are described
+and not implemented; the fifth I did implement, and it is marked as such.
 
 - **No `money` type.** Client A's `estimated_cost` and Client B's
   `amount_requested` are plain `number`s bounded by `min`/`max`. The currency is
@@ -138,12 +173,16 @@ format as given — none of this is implemented.
   start" is unexpressible. A single `date_range` field would make the common
   case a type rather than a cross-field rule, and leave the general `after`
   mechanism for the rarer ones.
-- **Nothing about how a field is used, only how it is entered.** The format
-  describes fields for input: label, type, constraints. It says nothing about
-  which fields are filtered, sorted, or grouped on. A platform reading these
-  definitions therefore cannot know which fields need database indexes or which
-  belong in a queue's filter bar — that has to be configured a second time,
-  somewhere else, by hand. Flags on the field would keep it in one place.
+- **Nothing about how a field is used, only how it is entered** *(implemented —
+  see Part 2b)*. The format as shipped describes fields for input: label, type,
+  constraints. It says nothing about which fields are filtered, sorted, or
+  grouped on, so a platform reading these definitions cannot know which fields
+  need database indexes or which belong in a queue's filter bar — that has to be
+  configured a second time, somewhere else, by hand. This is the one item on
+  this list I did not leave as prose: I added three optional flags
+  (`filterable`, `sortable`, `reporting_dimension`) to the three definitions and
+  wrote `describeIndexes` to consume them. See **Extensions to the starter
+  definitions** below.
 - **`sensitivity` has no defined vocabulary.** Two values appear across the
   three definitions — `internal` on Client A's `estimated_cost`, `confidential`
   on Client B's `annual_turnover` and Client C's `national_id` and
@@ -157,7 +196,7 @@ format as given — none of this is implemented.
 
 ```bash
 pnpm install
-pnpm test        # 42 tests: unit + integration against the real starter data
+pnpm test        # 55 tests: unit + integration against the real starter data
 pnpm dev         # the submission page, with a live demo of the library
 ```
 
@@ -168,11 +207,12 @@ lib/validation/
   types.ts       shared format types (no client knowledge)
   validate.ts    Part 1 — validation
   form.ts        Part 2 — form description
+  indexes.ts     Part 2b — index description (not asked for)
   index.ts       public surface
 lib/__tests__/
   validate.test.ts    type/constraint/edge-case unit tests
   fixtures.test.ts    integration against the three real definitions + records
-definitions/     the three starter definitions
+definitions/     the three starter definitions, plus the extensions above
 sample-records/  the three starter record sets
 app/             the Next.js submission page
 content/         Part A / Part C / AI-usage prose
