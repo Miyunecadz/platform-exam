@@ -78,6 +78,10 @@ The fixed part includes everything the three existing clients already have in co
 
 These are common across all three clients, and there is no reason to expect the fourth client to be different. Because of that, they are stored as normal database columns and only need to be built once.
 
+One item on that list looks like it overlaps with the field types below, so it is worth separating now. A `file` field is a named slot the client's definition asked for: it has a label, a required flag, and its own accepted extensions — Client A's photo of the problem, Client B's budget spreadsheet, Client C's referral letter. Because the definition knows it exists, the platform can require it, reject a `.docx`, and report how many applications arrived without one.
+
+Attachments in the fixed part are everything else — the scanned letter that turns up after submission, the photo a staff member adds during a site visit. Nothing in the definition describes them, so nothing can require or report on them. Both end up in the same storage; the difference is whether the client's definition knows the file is meant to be there. Without the generic half, every unplanned document forces a definition change, which is precisely the kind of change this design is trying to avoid.
+
 The flexible part contains the information that is different for each client, such as the pothole category, registry number, urgency level, or clinical notes. These fields are not hard-coded. Instead, they are defined in each client's settings, and the platform uses those settings to build the forms, queues, and reports automatically. For example, nobody has to build a referral form specifically for the clinic. The platform creates it using the clinic's field settings.
 
 ### How the flexible fields are stored
@@ -99,8 +103,6 @@ A field setting contains much more than just a name and data type. It also store
 Each field has a sensitivity level, and each user role is allowed to access certain levels.
 
 This is how the clinic's privacy requirements are handled. Reception staff can see the patient's name, phone number, and appointment details, but not the clinical notes. The clinical notes field is simply marked as sensitive, and the reception role is not given permission to view that level. The application doesn't need any clinic-specific code to make this work.
-
-Building Part B sharpened what "handled through configuration" means here, and it is less than I first wrote. A sensitivity level on a field is a *declaration*. Part B carries it from the definition through to the form description and stops, because there is no role in Part B to check it against. Field-level privacy is two things — a label on the field, which is configuration, and a rule about which roles may read which levels, which is a second settings table. Only the first half fits on a field. Getting the declaration in early still matters, for the reason in question 9: adding it after forms, exports, and reports exist means revisiting all three.
 
 **Filterable and sortable.** 
 
@@ -127,7 +129,7 @@ Fields are only one of six things a client defines. Onboarding a client means fi
 | What the client defines | Example from the briefs |
 | --- | --- |
 | Fields | Registry number, urgency, neighbourhood |
-| States and permitted moves | Received to Triaged to Scheduled |
+| Stages and permitted moves | Received to Triaged to Scheduled |
 | Roles | What a triage nurse may move and what they may see |
 | Notification rules | Trigger, channel, template, recipient |
 | Queues | Filter by specialty, sort by urgency then arrival time |
@@ -137,7 +139,9 @@ Fields are only one of six things a client defines. Onboarding a client means fi
 
 The platform provides a fixed set of field types. Adding a new field is a configuration change. Adding a new field *type* is development work, so the list has to be broad enough to cover a new client without touching code.
 
-I did not settle this list by reasoning about it. I wrote the three clients' definitions in Part B and took the list that fell out. It is ten types:
+I did not settle this list by reasoning about it, and I should be exact about where it came from. The three definitions are supplied with the exercise; I did not author them. The ten types are the ones those definitions actually use, and I took the list from implementing every one of them in Part B rather than from imagining what a platform ought to offer.
+
+That is a weaker source than inventing the list, and a better one. Working through someone else's three real clients moved the list twice, in both directions, and neither move was one I would have made from a blank page.
 
 | | | |
 | --- | --- | --- |
@@ -146,21 +150,17 @@ I did not settle this list by reasoning about it. I wrote the three clients' def
 | single choice | multiple choice | file upload |
 | yes/no | | |
 
-Writing the definitions changed the list twice, in both directions.
+**One type I had not planned for.** All three clients carry a plain yes/no — a resident requesting a callback, an organisation declaring it has been funded before, a patient consenting to records being shared. I had been treating that as a single choice with two options. It isn't. The answer is a boolean in the record, and treating it as a choice means every client re-declaring the same two options and every form drawing a dropdown where a checkbox belongs. Three unrelated clients all needing it is the argument for making it a type; one client needing it would not have been.
 
-**One type I had not planned for.** All three clients need a plain yes/no: a resident asking for a callback, an organisation declaring it has been funded before, a patient consenting to records being shared. I had been treating this as a single choice with two options. It isn't — the answer is a boolean in the record, and treating it as a choice means every client re-declaring the same two options and every form drawing a dropdown for a checkbox.
+**Three types I planned for and never used.** I expected money, address, and date range. None of them appear in the three definitions:
 
-**Three types I planned for and never used.** I expected to need money, address, and date range. None survived contact with the three briefs:
+- **Money** is a `number` with a range. Client B's requested amount is 1,000–500,000; Client A's estimated cost is 0–1,000,000. `min` and `max` carry both.
+- **Address** is `text` with a length limit. Client A's street address is free text that a person reads.
+- **Date range** is two `date` fields — Client B's project start and project end.
 
-- **Money** became `number` with a range. Client B's requested amount is 1,000–500,000; Client A's estimated cost is 0–1,000,000. A number with `min` and `max` covers both.
-- **Address** became `text` with a length limit. Client A's street address is free text that a person reads.
-- **Date range** became two `date` fields — Client B's project start and project end.
-
-The first two are honest simplifications with a cost I can name. A money type would carry a currency and fix the rounding rule in one place instead of leaving both to whoever writes the definition. An address type would let reports group by city, which `text` cannot.
+The first two are simplifications I would accept, and I can name what they cost. A money type would carry a currency and fix the rounding rule in one place instead of leaving both to whoever writes the definition — as it stands, `3.7431` is a valid repair cost. An address type would let reports group by city, which `text` cannot.
 
 The third is not a simplification. It is a gap, and Part B is where I found it — see question 8.
-
-> **Draft — rework in your own voice.** This section now claims the list is empirical rather than theorised, which is a stronger answer but only if you can say it as your own. The three bullets are the ones worth being able to defend cold.
 
 ### What has to be true for onboarding to require no new code
 
@@ -184,7 +184,7 @@ A new client should be defined in a single configuration file. That file can be 
 
 If setting up a client means clicking through lots of screens instead, the process becomes slower, less consistent, and more likely to introduce mistakes.
 
-Two things about this that only became clear once I had written such a file three times. The first is that "reviewed before it goes live" is doing more work in that sentence than it looks. Nothing checks the document itself — a choice field with no options, a minimum above its maximum, a field type that doesn't exist. The library validates records against a definition and trusts the definition completely. On a platform where non-developers author definitions, a bad definition is at least as likely as a bad record, and a meta-schema over the definition format is the first thing I would add. The second is that a definition is easier to read than the settings screen it replaces, which is most of why I would delay that screen — see question 9.
+Two things about this that only became clear once I had worked through three such files field by field. The first is that "reviewed before it goes live" is doing more work in that sentence than it looks. Nothing checks the document itself — a choice field with no options, a minimum above its maximum, a field type that doesn't exist. The library validates records against a definition and trusts the definition completely. On a platform where non-developers author definitions, a bad definition is at least as likely as a bad record, and a meta-schema over the definition format is the first thing I would add. The second is that a definition is easier to read than the settings screen it replaces, which is most of why I would delay that screen — see question 9.
 
 **Definitions must be versioned, and each record must remember the version it was created under.**
 
@@ -202,9 +202,11 @@ That's the line between improving the platform and creating client-specific code
 
 ### What Part B covers, and what it doesn't
 
-Part B implements the first of the six tables — fields — for all three clients, in two directions: checking a submitted record against a definition, and turning the same definition into a form description and an index list. It does not implement the other five. There are no states, transitions, roles, notification rules, queues, or reports in the code.
+Part B implements the first of the six tables — fields — for all three clients, in two directions: checking a submitted record against a definition, and turning the same definition into a form description and an index list. It does not implement the other five. There are no stages, transitions, roles, notification rules, queues, or reports in the code.
 
 I'm saying that plainly because the fields table is the one where "differences as data" is easiest to believe and the workflow tables are where it actually gets tested. What Part B does establish is the pattern the other five would follow: a definition is a plain document, the code that reads it holds no client knowledge, and every client goes through the same path. What it does not establish is that the pattern survives the workflow tables, which is a claim I am making from design rather than from code.
+
+One claim from earlier in this section needs downgrading in the same spirit. I said the clinic's privacy requirements are "handled through configuration" by a sensitivity level on a field. Building Part B sharpened what that means, and it is less than I first wrote. A sensitivity level is a *declaration*: Part B carries it from the definition through to the form description and then stops, because there is no role in Part B to check it against. Field-level privacy is two things — a label on the field, which is configuration, and a rule about which roles may read which levels, which is a second settings table. Only the first half fits on a field. Getting the declaration in early still matters, for the reason in question 9: adding it after forms, exports, and reports exist means revisiting all three.
 
 ---
 
@@ -286,15 +288,9 @@ As soon as any of these exist, part of the workflow becomes specific to one clie
 
 This can also be checked automatically. Searching the codebase for workflow stage names should only find them in test data. If they appear anywhere else, it means the configuration model has been bypassed.
 
-### One decision that didn't end up in the definition
+### Two rules that protect records already in the system
 
-Worth recording, because it is the kind of thing this rule is meant to catch.
-
-When a record arrives with a key no field defines, something has to decide what happens: warn and accept, reject, or ignore. In Part B that choice is an argument to the validation call, not a setting in the client's definition — so a client's own document does not say how strict their platform is about unexpected data.
-
-I think that is right, and the reason is a useful test to have. The strictness depends on where the record came from, not on whose record it is: a one-off migration wants to warn and keep going, a public submission form wants to reject, an internal replay wants to ignore. Those three want different answers for the same client on the same day. A setting per client cannot express that; an argument per call can.
-
-The test I would apply generally: **does this vary by client, or by the situation the client is in?** The first belongs in the definition. The second belongs in the call. Putting situational choices into client settings looks like flexibility and produces a settings table nobody can reason about — which is the failure mode principle 2 is guarding against.
+Settings change while records are live. Both rules exist so that changing a setting today cannot alter what a record meant yesterday.
 
 **Stages are hidden, never deleted.**
 
@@ -305,6 +301,16 @@ If a client removes a workflow stage completely, any records already in that sta
 Every settings change should record who made it, when it was made, and what changed.
 
 This is especially important for the clinic, where audits are expected and staff may need to prove who changed a particular setting. It also provides a reliable history if a client later questions whether a setting was ever modified.
+
+### One decision that didn't end up in the definition
+
+Worth recording, because it is the kind of thing this rule is meant to catch.
+
+When a record arrives with a key no field defines, something has to decide what happens: warn and accept, reject, or ignore. In Part B that choice is an argument to the validation call, not a setting in the client's definition — so a client's own document does not say how strict their platform is about unexpected data.
+
+I think that is right, and the reason is a useful test to have. The strictness depends on where the record came from, not on whose record it is: a one-off migration wants to warn and keep going, a public submission form wants to reject, an internal replay wants to ignore. Those three want different answers for the same client on the same day. A setting per client cannot express that; an argument per call can.
+
+The test I would apply generally: **does this vary by client, or by the situation the client is in?** The first belongs in the definition. The second belongs in the call. Putting situational choices into client settings looks like flexibility and produces a settings table nobody can reason about — which is the failure mode principle 2 is guarding against.
 
 ---
 
@@ -714,8 +720,106 @@ PostgreSQL supports both sides:
 
 #### Database setup
 
-The platform uses PostgreSQL 16 on Amazon RDS, with one database per client.
+PostgreSQL 16 on Amazon RDS, Multi-AZ, **one database per installation** — not one per client.
 
+The clinic has its own installation, so its database holds one client's data and nothing else. Client A and Client B share an installation, so they share a database, and inside it they are kept apart by row-level security and a client ID on every table.
+
+That difference is the whole reason the client ID exists even where it is always the same value. Moving a client from a shared installation to a dedicated one is a deployment change. It is not a rewrite, because the code was already written as though the client had neighbours.
+
+---
+
+### Third-party services
+
+Named products, with the reason each one is there rather than the category it belongs to.
+
+**Hosting and delivery**
+
+* **AWS**, one account per installation. The account boundary is the same boundary as the database, so a mistake in one installation cannot reach another's data, backups, or secrets.
+* **ECS on Fargate** for the API and the workers. No servers to patch, and the API and the workers are the same image run with different commands.
+* **CloudFront + S3** for the React build. The frontend is static files; it does not need a server.
+* **Terraform** for everything above. A new installation has to be a reviewed change that produces an environment, not a morning of clicking in a console.
+
+**Authentication**
+
+* **Amazon Cognito**, one user pool per installation.
+
+  The reason is the isolation argument again rather than the feature list, and it is worth being precise about what the pool does and does not do. It does not decide which client a person belongs to — question 4 already settles that, and the answer is the signed-in account, never anything the request carries. A pool per installation buys something narrower: the clinic's user directory is a separate object with separate credentials, separate reset flows, and separate MFA policy, so its staff do not sit in the same directory as anyone else's. Inside the installation Client A and Client B share a pool, and there the account still decides. It federates to SAML and OIDC for the clinic's hospital identity provider, and enforces MFA for support accounts.
+
+  **Auth0** is the better product if enterprise SSO variety grows faster than expected. I would move if a client needs something Cognito's federation cannot express; per-user cost at 300 clients is the reason I would not start there.
+
+**Files**
+
+* **S3**, one bucket per installation, encrypted with a **KMS** key that installation owns. Uploads and downloads go through pre-signed URLs, so file bytes never pass through the API.
+* **S3 Object Lock** for the clinic's retention rules. Retention that a bug can delete is not retention.
+
+**Messaging**
+
+* **Amazon SES** for email — cost and AWS-native identity handling. If deliverability becomes a real complaint I would move transactional mail to **Postmark**, which is an afternoon's work.
+* **Twilio** for SMS, for coverage and for Hebrew message handling.
+
+**Background work**
+
+* **BullMQ on Amazon ElastiCache for Redis 7**, which is what question 5 is really about.
+
+  I chose it over **Amazon SQS** for a specific reason: SQS caps message delay at 15 minutes, and the clinic's rule is a check four hours after a referral is marked urgent. On SQS that shape has to be rebuilt as a polling scan — exactly the loop question 5 says fails first. BullMQ has delayed jobs natively, so "schedule the check when the referral arrives" is one call.
+
+  Fairness comes from a queue per client with bounded worker concurrency, rather than one shared queue that a single client's backlog can fill.
+
+**Cache**
+
+* The same **ElastiCache** cluster. Client settings are held in process memory as described in question 3; Redis holds only what has to be shared between instances, and every key is prefixed with the client ID for the reason in question 4.
+
+**Monitoring**
+
+* **Sentry** for errors, **Grafana Cloud** for metrics, logs, and traces, instrumented through **OpenTelemetry** so the platform is not writing to a vendor's SDK directly.
+* The metric that matters most is not uptime. It is scheduled-job lateness — promised time against actual time, alerting on the gap. Question 5's failure is silent precisely because a dashboard of successful runs looks fine while the clinic's four-hour alert quietly becomes a seven-hour one.
+
+**Development**
+
+* **GitHub Actions** for CI and deployment, **AWS Secrets Manager** for credentials. One pipeline, one image, every installation.
+
+---
+
+### What is hard to reverse, and what is easy to swap
+
+Worth separating, because it decides where abstraction is worth paying for.
+
+**Hard to reverse — decide carefully now**
+
+* **PostgreSQL.** Two separate things depend on it: JSONB carries the flexible fields, and row-level security enforces client separation. Leaving Postgres means rebuilding both, and one of them is a security guarantee. This is the single most expensive choice in the document.
+* **One database per installation.** It shapes backups, retention, offboarding, and the support-account rules in question 4. Changing it later is a data migration for every client at once.
+* **TypeScript everywhere.** The shared definition types are the thing that keeps the backend and the generated frontend agreeing.
+
+**Awkward but survivable**
+
+* **NestJS.** Request-scoped client context is load-bearing, so replacing the framework means re-proving the isolation story. The pattern would survive; the proof would have to be redone.
+* **BullMQ and Redis.** Job payloads and retry semantics leak into how jobs are written. Moving is a rewrite of the job layer, not of the platform.
+
+**Easy to swap — do not over-abstract**
+
+* SES, Twilio, Sentry, Grafana. Each sits behind a narrow interface — `sendEmail`, `sendSms`, `recordError` — because each is genuinely replaceable and none of them should be able to shape the platform's code.
+* Cognito, because it speaks OIDC and the platform holds a user ID rather than a Cognito object.
+* S3 is listed here honestly rather than confidently. The API is replaceable; Object Lock and per-installation KMS keys are less so.
+
+I would not put an abstraction layer over PostgreSQL. An interface exists to make swapping cheap, and swapping this is not going to be cheap whatever I write. Pretending otherwise buys nothing and costs the JSONB and row-level-security features that made it the right choice.
+
+---
+
+### The alternative I considered seriously and rejected
+
+**A document database — MongoDB — instead of PostgreSQL with JSONB.**
+
+It is a real candidate, not a straw one. Every client having a different record shape is the exact problem document databases exist for. No JSONB column, no migrations when a client adds a field, and the field definitions map almost directly onto stored documents. If the platform were only the fields table, I think MongoDB would win.
+
+I rejected it on two grounds.
+
+**Isolation would move back into application code.** There is no row-level security equivalent. Every query would have to carry its own client filter, and correctness would depend on every developer remembering, forever. Question 4's argument is that the database should refuse rather than that people should remember — and this choice takes that away. That is not a performance trade-off; it is trading a guarantee for a habit.
+
+**The platform is only half flexible.** Workflow stages, transitions, roles, permissions, and the settings audit trail are relational, and they need transactions and joins. Those five tables are where the design is actually tested, as I said at the end of question 2. Choosing the database that suits the easy half means fighting it for the hard half.
+
+PostgreSQL is the compromise: JSONB is not as natural as documents, and I accept slower and clumsier flexible-field queries in exchange for keeping isolation in the database and the relational half genuinely relational.
+
+**A smaller one, briefly.** I considered **Temporal** rather than BullMQ, because the clinic's four-hour rule and the foundation's fourteen-day follow-up are both long-running workflows and that is what Temporal is for. I rejected it as a cluster to operate and a programming model to teach, for three clients whose needs BullMQ's delayed jobs already cover. If the workflow tables turn out to need genuine long-running orchestration, this is the decision I expect to revisit first.
 
 ---
 
@@ -883,6 +987,8 @@ The system should preserve enough history to explain what happened in the past.
 
 Yes — four areas. The first came out of writing the code and is the one I would not have predicted. The other three I can see from the briefs, and two of them share a cause.
 
+I have numbered them 0 to 3 rather than 1 to 4 deliberately. Items 1 to 3 are gaps *between records*. Item 0 is the same shape one level down — something true between two fields inside a single record — and it is the only one Part B walked into rather than reasoned about, so it does not belong in the same sequence.
+
 ### The common issue
 
 The current data model works very well for a single record.
@@ -890,8 +996,6 @@ The current data model works very well for a single record.
 However, it does not have a good way to represent things that exist **between records**.
 
 Both of the main problems come from this same limitation. This suggests that the model needs to support relationships between records, not just more fields inside a record.
-
-The first problem below is a narrower version of the same shape — something true *between two fields* rather than between two records — and it is the one Part B walked into.
 
 ---
 
@@ -916,8 +1020,6 @@ Two options, and I would take the second.
 The second is the same trade-off as the field type list: a fixed set of primitives, chosen so a new client needs no new code, and grown as a platform feature when one genuinely does. It also keeps the rule where it can be tested and where an error message can be written by a person rather than generated.
 
 The honest cost is that the boundary moves. "No new code for a new client" is true for fields and false for a client that needs a cross-field rule nobody has built yet. I would rather say that plainly than widen the configuration language until it becomes a programming language nobody wants to debug.
-
-> **Draft — rework in your own voice.** This is the most valuable thing in question 8 for a follow-up conversation, because it is a mistake with a fix rather than a gap you spotted. Worth being able to tell as a story: what you expected, what the definition wouldn't let you write, which of the two options you'd take and why.
 
 ---
 
