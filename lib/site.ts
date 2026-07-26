@@ -1,5 +1,13 @@
-// Set this to your published repository before submitting.
-export const REPO_URL = "https://github.com/YOUR_USERNAME/platform-foundation";
+export const REPO_URL = "https://github.com/Miyunecadz/platform-exam";
+
+/** Deep links into the repository, so a reader can go straight to the thing named. */
+export const REPO = {
+  root: REPO_URL,
+  readme: `${REPO_URL}#readme`,
+  library: `${REPO_URL}/tree/main/lib/validation`,
+  tests: `${REPO_URL}/tree/main/lib/__tests__`,
+  definitions: `${REPO_URL}/tree/main/definitions`,
+} as const;
 
 export type Section = {
   href: string;

@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import Demo from "@/components/Demo";
 import Masthead from "@/components/Masthead";
 import Pager from "@/components/Pager";
-import { REPO_URL, sectionByHref } from "@/lib/site";
+import { REPO, sectionByHref } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Part B · Library",
@@ -56,14 +57,14 @@ export default function Page() {
               </span>
             </div>
             <div className="actions">
-              <a className="btn" href={REPO_URL}>
-                Read the code ↗
+              <a className="btn" href={REPO.library}>
+                Read the library ↗
               </a>
-              <a
-                className="btn secondary"
-                href={`${REPO_URL}#part-b--what-it-does`}
-              >
-                Part B README
+              <Link className="btn secondary" href="/part-b/readme">
+                README
+              </Link>
+              <a className="btn secondary" href={REPO.tests}>
+                The 55 tests ↗
               </a>
             </div>
           </div>

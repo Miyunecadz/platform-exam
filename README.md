@@ -112,9 +112,17 @@ mine, not the exercise's, and everything works without them.
   — the "how a field is used" gap described below. `describeIndexes` is the only
   consumer.
 
-The validator ignores all four keys, so a definition without them behaves
-identically. A fourth client's definition, written to the format exactly as
-shipped, needs no changes to run here.
+No validation rule reads any of them: `version` is copied to the result for the
+caller to store, and the three flags are read only by `describeIndexes`. A
+definition carrying none of them validates, describes a form, and returns an
+empty index list — checked, not assumed. A fourth client's definition, written to
+the format exactly as shipped, runs here unchanged.
+
+One caveat, because it bites at the wrong moment otherwise: `version` is *typed*
+as required on `Definition`, on the argument that a version which can be omitted
+will be omitted. Nothing enforces it at runtime. So a shipped-format definition
+runs, but assigning that JSON to the `Definition` type will not typecheck without
+widening it first.
 
 ---
 

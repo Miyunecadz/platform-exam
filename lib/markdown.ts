@@ -42,7 +42,18 @@ function readContent(file: string): string {
  * two-level outline the section rail navigates by.
  */
 export function renderDocument(file: string): Rendered {
-  const md = readContent(file);
+  return render(readContent(file));
+}
+
+/**
+ * The same, for a file living outside `content/` — the repository README, which
+ * has to be readable on the page and not only on GitHub.
+ */
+export function renderRepoFile(relPath: string): Rendered {
+  return render(readFileSync(join(process.cwd(), relPath), "utf8"));
+}
+
+function render(md: string): Rendered {
   const tokens = marked.lexer(md);
 
   let title = "";
